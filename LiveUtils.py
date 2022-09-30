@@ -44,7 +44,6 @@ def scrubBy(time):
 
 def play():
     """Starts Ableton Playing"""
-    print "playing"
     getSong().start_playing()
 
 def stopClips():
