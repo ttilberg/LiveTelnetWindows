@@ -34,9 +34,8 @@ To get started quickly take a look in LiveUtils.py
 """
 
 import Live
-import sys
-sys.path.append('C:\\Python27\\lib')
-import StringIO, socket, code
+from io import StringIO
+import socket, code
 from . import LiveUtils
 
 class LiveTelnet:
@@ -49,18 +48,18 @@ class LiveTelnet:
         self.originalstdout = sys.stdout
         self.originalstderr = sys.stderr
 
-        self.stdin = StringIO.StringIO() 
-        self.stdout = StringIO.StringIO()
-        self.stderr = StringIO.StringIO()
+        self.stdin = StringIO()
+        self.stdout = StringIO()
+        self.stderr = StringIO()
 
         self.telnetSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.telnetSocket.bind( ('', 23) )
         self.telnetSocket.setblocking(False)
         self.telnetSocket.listen(1)
         self.telnetConnection = None
-        
+
         self.interpreter = code.InteractiveConsole(globals())
-        
+
         self.telnetBuffer = ""
         self.lastData = ""
         self.commandBuffer = []
@@ -102,8 +101,8 @@ class LiveTelnet:
 
     def request_rebuild_midi_map(self):
         """
-        To be called from any components, as soon as their internal state changed in a 
-        way, that we do need to remap the mappings that are processed directly by the 
+        To be called from any components, as soon as their internal state changed in a
+        way, that we do need to remap the mappings that are processed directly by the
         Live engine.
         Dont assume that the request will immediately result in a call to
         your build_midi_map function. For performance reasons this is only
@@ -113,13 +112,16 @@ class LiveTelnet:
 
     def build_midi_map(self, midi_map_handle):
         """
-        New MIDI mappings can only be set when the scripts 'build_midi_map' function 
-        is invoked by our C instance sibling. Its either invoked when we have requested it 
+        New MIDI mappings can only be set when the scripts 'build_midi_map' function
+        is invoked by our C instance sibling. Its either invoked when we have requested it
         (see 'request_rebuild_midi_map' above) or when due to a change in Lives internal state,
         a rebuild is needed.
         """
         return
-    
+
+    def send(self, message):
+        self.telnetConnection.send(message.encode())
+
     def update_display(self):
         #Updates every 100ms
 
@@ -133,20 +135,20 @@ class LiveTelnet:
                 pass
             else:
                 #Yay! Someone connected! Send them the banner and first prompt.
-                self.telnetConnection.send("Welcome to the Ableton Live Python Interpreter (Python 2.2.1)\r\n")
-                self.telnetConnection.send("Brought to by LiveAPI.org\r\n")
-                self.telnetConnection.send(">>> ")
+                self.send("Welcome to the Ableton Live Python Interpreter (Python 2.2.1)\r\n")
+                self.send("Brought to by LiveAPI.org\r\n")
+                self.send(">>> ")
         else:
             #Someone's connected, so lets interact with them.
             try:
                 #If the client has typed anything, get it
-                data = self.telnetConnection.recv(1)
+                data = self.telnetConnection.recv(1).decode()
             except:
                 #Nope they haven't typed anything yet
                 data = "" #
 
             #If return is pressed, process the command (This if statement is so ugly because ableton python doesn't have universal newlines)
-            if (data == "\n" or data == "\r") and (self.lastData != "\n" and self.lastData != "\r"):                
+            if (data == "\n" or data == "\r") and (self.lastData != "\n" and self.lastData != "\r"):
                 continues = self.interpreter.push(self.telnetBuffer.rstrip()) #should be strip("/r/n") but ableton python throws an error
                 self.commandBuffer.append(self.telnetBuffer.rstrip())
                 self.telnetBuffer = ""
@@ -154,22 +156,22 @@ class LiveTelnet:
                 #if the user input is multi-line, continue, otherwise return the results
 
                 if continues:
-                    self.telnetConnection.send("... ")
+                    self.send("... ")
                 else:
                     #return stdout to the client
-                    self.telnetConnection.send(self.stdout.getvalue().replace("\n","\r\n"))
+                    self.send(self.stdout.getvalue().replace("\n","\r\n"))
                     #return stderr to the client
-                    self.telnetConnection.send(self.stderr.getvalue().replace("\n","\r\n"))
-                    self.telnetConnection.send(">>> ")
+                    self.send(self.stderr.getvalue().replace("\n","\r\n"))
+                    self.send(">>> ")
 
                 #Empty buffers by creating new stringIO objects
                 #There's probably a better way to empty these
                 self.stdin.close()
                 self.stdout.close()
                 self.stderr.close()
-                self.stdin = StringIO.StringIO() 
-                self.stdout = StringIO.StringIO()
-                self.stderr = StringIO.StringIO()
+                self.stdin = StringIO()
+                self.stdout = StringIO()
+                self.stderr = StringIO()
                 #re-redirect the stdio
                 sys.stdin = self.stdin
                 sys.stdout = self.stdout
@@ -179,16 +181,16 @@ class LiveTelnet:
             elif data == "\b": #deals with backspaces
                 if len(self.telnetBuffer):
                     self.telnetBuffer = self.telnetBuffer[:-1]
-                    self.telnetConnection.send(" \b") #deletes the character on the console
+                    self.send(" \b") #deletes the character on the console
                 else:
-                    self.telnetConnection.send(" ")
+                    self.send(" ")
             elif data != "\n" and data != "\r":
                 self.telnetBuffer = self.telnetBuffer + data
             self.lastData = data
 
     def send_midi(self, midi_event_bytes):
         """
-        Use this function to send MIDI events through Live to the _real_ MIDI devices 
+        Use this function to send MIDI events through Live to the _real_ MIDI devices
         that this script is assigned to.
         """
         pass
